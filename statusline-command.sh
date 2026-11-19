@@ -16,14 +16,6 @@ color_rgb() {
     fi
 }
 
-shade() {
-    local p=${1%.*}; : "${p:=0}"
-    if (( p < 25 )); then _s='\xe2\x96\x91'
-    elif (( p < 50 )); then _s='\xe2\x96\x92'
-    elif (( p < 75 )); then _s='\xe2\x96\x93'
-    else _s='\xe2\x96\x88'; fi
-}
-
 circle() {
     local p=${1%.*}; : "${p:=0}"
     if (( p < 20 )); then _c='\xe2\x97\x8b'
@@ -71,12 +63,12 @@ L="\033[1;38;2;217;119;87m${model}${R}"
 [ -n "$effort" ] && L="${L} \033[38;2;217;119;87m(${effort})${R}"
 [ -n "$mode" ] && L="${L}${P}\033[38;2;215;225;130m${mode}${R}"
 
-usage_emoji "$used_pct"; shade "$used_pct"; color_rgb "$used_pct"
-L="${L}${P}${_e} \033[1;38;2;${_r};${_g};${_b}m${_s} ${used_pct%.*}%${R}"
+usage_emoji "$used_pct"; circle "$used_pct"; color_rgb "$used_pct"
+L="${L}${P}${_e} \033[1;38;2;${_r};${_g};${_b}m${_c} ${used_pct%.*}%${R}"
 
 if [ -n "$five_pct" ]; then
     circle "$five_pct"; t=""
-    [ -n "$five_reset" ] && t=$(date -d "@${five_reset}" +"%-I:%M %p" 2>/dev/null || date -r "${five_reset}" +"%-I:%M %p" 2>/dev/null) && t=" (resets ${t})"
+    [ -n "$five_reset" ] && t=$(date -d "@${five_reset}" +"%-I:%M %p" 2>/dev/null || date -r "${five_reset}" +"%-I:%M %p" 2>/dev/null) && t=" (${t})"
     L="${L}${P}\033[38;2;120;200;255m5h: ${_c} ${five_pct%.*}%${t}${R}"
 fi
 if [ -n "$seven_pct" ]; then

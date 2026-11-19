@@ -19,13 +19,6 @@ function Color-At([double]$p) {
     }
 }
 
-function Shade-Glyph([double]$p) {
-    if ($p -lt 25) { [char]0x2591 }      # ░
-    elseif ($p -lt 50) { [char]0x2592 }  # ▒
-    elseif ($p -lt 75) { [char]0x2593 }  # ▓
-    else { [char]0x2588 }                # █
-}
-
 function Circle-Glyph([double]$p) {
     if ($p -lt 20) { [char]0x25CB }      # ○
     elseif ($p -lt 40) { [char]0x25D4 }  # ◔
@@ -53,7 +46,7 @@ if ($data.output_style.name) { $L += "$PIPE$ESC[38;2;215;225;130m$($data.output_
 # --- context ---
 $usedPct = if ($data.context_window.used_percentage) { $data.context_window.used_percentage } else { 0 }
 $rgb = Color-At $usedPct
-$L += "$PIPE$(Usage-Emoji $usedPct) $ESC[1;38;2;$($rgb[0]);$($rgb[1]);$($rgb[2])m$(Shade-Glyph $usedPct) $("{0:F0}%" -f $usedPct)$R"
+$L += "$PIPE$(Usage-Emoji $usedPct) $ESC[1;38;2;$($rgb[0]);$($rgb[1]);$($rgb[2])m$(Circle-Glyph $usedPct) $("{0:F0}%" -f $usedPct)$R"
 
 # --- rate limits ---
 $C_RL = "$ESC[38;2;120;200;255m"
@@ -61,7 +54,7 @@ if ($null -ne $data.rate_limits.five_hour.used_percentage) {
     $p = $data.rate_limits.five_hour.used_percentage
     $resetStr = ""
     if ($data.rate_limits.five_hour.resets_at) {
-        try { $resetStr = " (resets $([DateTimeOffset]::FromUnixTimeSeconds([int64]$data.rate_limits.five_hour.resets_at).ToLocalTime().ToString('h:mm tt')))" } catch { }
+        try { $resetStr = " ($([DateTimeOffset]::FromUnixTimeSeconds([int64]$data.rate_limits.five_hour.resets_at).ToLocalTime().ToString('h:mm tt')))" } catch { }
     }
     $L += "$PIPE${C_RL}5h: $(Circle-Glyph $p) $("{0:F0}%" -f $p)$resetStr$R"
 }
