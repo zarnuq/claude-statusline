@@ -9,7 +9,8 @@ functionally-identical scripts — one per platform family — plus their instal
 build system, package manifest, or test suite; this is a pair of standalone shell/PowerShell
 scripts consumed directly by Claude Code's `statusLine` settings hook.
 
-- `statusline-command.sh` — Linux/macOS/WSL implementation (bash + `jq` + `awk`).
+- `statusline-command.sh` — Linux/macOS/WSL implementation (bash + `jq`). Single `jq` call for
+  all JSON extraction; pure bash arithmetic for color interpolation (no `awk`).
 - `statusline-command.ps1` — Windows implementation, a native PowerShell port with **no
   dependency on bash, `jq`, or Git for Windows** (only `git.exe` on PATH, and only for the
   branch segment).
@@ -37,32 +38,29 @@ stdin (session/model/cost/context/rate-limit/workspace state) and expecting two 
 
 1. Read all of stdin as one JSON blob (`input=$(cat)` in bash; `[Console]::In.ReadToEnd()` +
    `ConvertFrom-Json` in PowerShell).
-2. Build a set of independent "segments" (model+effort, thinking mode, output style, context
-   bar, cost, code velocity, rate limits, cwd, branch/worktree), each conditionally rendered only
-   if its underlying JSON field is present — every field is optional and segments degrade
-   gracefully to empty strings when absent.
-3. Join non-empty segments with a shared dim-gray ` | ` separator (`$PIPE`/`$SEP`) into two output
-   lines and print them.
+2. Extract all fields in one pass (bash uses a single `jq` call with `read` assignments;
+   PowerShell accesses `$data` properties directly).
+3. Build segments inline — model+effort, context (emoji + circle glyph + colored percentage),
+   rate limits (circle glyph + percentage + reset time/countdown), cost, velocity, cwd,
+   branch/worktree, output style — each conditionally rendered only if its underlying JSON
+   field is present.
+4. Print two lines joined with dim-gray ` | ` separators.
 
-Key derived-vs-raw distinctions worth knowing before editing:
+**Line 1**: model(effort) | context | 5h rate limit | 7d rate limit | cost | velocity
+**Line 2**: cwd | branch/worktree | output style
 
-- **Context bar**: a 20-block gradient bar (green → yellow → red) driven by
-  `context_window.used_percentage`, built via a `color_at`/`Color-At` linear-interpolation helper.
-  The percentage text is **not** colored independently from `used_percentage` — it deliberately
-  reuses the RGB of the bar's *last filled block* (`last_pos`/`$lastPos`, derived from `filled`/
-  `$filled`), so the two always match exactly even though 20 blocks quantize the percentage. Keep
-  that indirection if you touch this segment; recomputing from the raw percentage will make the
-  text and bar drift apart at some values.
-- **Rate limits**: `rate_limits.five_hour` and `rate_limits.seven_day`, each rendered with a
-  5-stage "moon phase" circle glyph (`○ ◔ ◑ ◕ ●`) keyed off `used_percentage` — but the two windows
-  render their reset differently. `five_hour` shows a local-time clock (`resets_at` epoch → local
+Key details worth knowing before editing:
+
+- **Context indicator**: a colored circle glyph (`○ ◔ ◑ ◕ ●`) + usage emoji (`🟢 ⚡ 🔥 🚨`)
+  driven by `context_window.used_percentage`. The circle and percentage text are both colored
+  via `color_rgb`/`Color-At` linear interpolation: green(25,180,95) → yellow(220,200,0) →
+  red(220,40,20). Bash uses integer arithmetic (truncation); PowerShell uses `[math]::Truncate`
+  to match.
+- **Rate limits**: `rate_limits.five_hour` and `rate_limits.seven_day`, each rendered with the
+  same 5-stage circle glyph. `five_hour` shows a local-time clock (`resets_at` epoch → local
   `h:mm a`; bash tries GNU `date -d` first, falling back to BSD `date -r` for macOS; PowerShell
-  uses `[DateTimeOffset]::FromUnixTimeSeconds(...)`). `seven_day` instead shows a countdown
-  duration like `(9d2h)` via `epoch_to_countdown`/`Format-Countdown`, not a clock time.
-- **Disabled token-count segment**: there's a commented-out `(used/max)` token-count sub-segment
-  right after the context percentage in both scripts (search "Token count"). It's intentionally
-  off by default — uncomment in both scripts together to re-enable, and note its color is wired
-  to the same last-filled-block RGB as the percentage text, not a fixed color.
+  uses `[DateTimeOffset]::FromUnixTimeSeconds(...)`). `seven_day` shows a countdown duration
+  like `(9d2h)` via bash arithmetic / .NET math, not a clock time.
 - **Worktree awareness**: when `workspace.git_worktree` is present (a Claude Code
   `EnterWorktree`-isolated session), line 2 shows the worktree name and its
   `worktree.original_branch` instead of the plain current branch. The plain-branch segment
@@ -71,28 +69,8 @@ Key derived-vs-raw distinctions worth knowing before editing:
 - **Numeric formatting/rounding parity**: PowerShell's default numeric formatting traps are easy
   to reach for and *look* equivalent to the bash side but aren't. Use `F`-format specifiers
   (`"{0:F2}"`), never `N`-format (`"{0:N2}"`) — `N` inserts thousands separators (`$1,234.56`)
-  that bash's `printf "%.2f"` never produces. Round with `[math]::Round(x,
-  [MidpointRounding]::AwayFromZero)`, not bare `[math]::Round` — its default is banker's rounding
-  (round-half-to-even), which disagrees with awk's `int(v+0.5)` at exact `.5` boundaries (e.g. the
-  context bar's fill count). And RGB channels in `Color-At` must use `[math]::Truncate`, not
-  `Round` — the bash `color_at` truncates via awk's `%d`, so `Round` drifts the gradient by up to
-  1 per channel versus bash.
-- **Water segment (opt-in)**: lives in `water.sh`/`water.ps1`, sourced at the end of each main
-  script only if present (installers copy it only with a water flag). It's appended to `$line2`
-  sized to `$COLUMNS` (set by Claude Code; `tput cols` doesn't work; keep the 6-column margin):
-  the labeled amounts if they fit, with facts chosen by `pick_facts`/`Select-FunFacts` to fill the
-  spare columns (seed picks among all fitting pairs from different rows, else among fitting single
-  facts; enumeration order must match across ports), else the compact form. Width
-  is measured with ANSI stripped and emoji as 2 columns. Enabled by script args
-  (`--water-session`/`-WaterSession`, etc.) that the installers append to the `statusLine`
-  command; the PS `param()` stays in the main script so the switches bind. Session water = `cost.total_cost_usd` ×
-  `WATER_ML_PER_USD`; lifetime prices `~/.claude/stats-cache.json`'s `modelUsage` tokens with the
-  shared `water-prices.txt` (official rates, 1h cache writes, exact id or id + `-YYYYMMDD`), plus
-  $0.01/web search, and adds the session cost. Models not in that table use prices learned from
-  transcripts' `cost-state` records (cost ÷ weighted tokens), cached in `water-learned-prices.txt`
-  for a day and only computed when such a model exists; failing that, a family guess. Fun
-  facts come from the shared `water-facts.txt` (pipe-delimited, read by both ports), rotating every
-  5 minutes by session_id byte sum + `floor(now/300)`.
+  that bash's `printf "%.2f"` never produces. RGB channels in `Color-At` must use
+  `[math]::Truncate`, not `Round` — the bash `color_rgb` truncates via integer arithmetic.
 
 ## Testing changes
 
