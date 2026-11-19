@@ -61,7 +61,6 @@ usage_emoji() {
 # Line 1
 L="\033[1;38;2;217;119;87m${model}${R}"
 [ -n "$effort" ] && L="${L} \033[38;2;217;119;87m(${effort})${R}"
-[ -n "$mode" ] && L="${L}${P}\033[38;2;215;225;130m${mode}${R}"
 
 usage_emoji "$used_pct"; circle "$used_pct"; color_rgb "$used_pct"
 L="${L}${P}${_e} \033[1;38;2;${_r};${_g};${_b}m${_c} ${used_pct%.*}%${R}"
@@ -97,5 +96,6 @@ else
     L2="${L2}${P}\033[38;2;0;220;220m\xf0\x9f\x8c\xbf ${git_wt}${R}"
     [ -n "$orig_br" ] && L2="${L2}${P}\033[38;2;220;180;0m\xe2\x86\x90 ${orig_br}${R}"
 fi
+[ -n "$mode" ] && L2="${L2}${P}\033[38;2;215;225;130m${mode}${R}"
 
 printf '%b\n%b' "$L" "$L2"

@@ -40,9 +40,6 @@ $effort = $data.effort.level
 $L = "$ESC[1;38;2;217;119;87m$model$R"
 if ($effort) { $L += " $ESC[38;2;217;119;87m($effort)$R" }
 
-# --- mode ---
-if ($data.output_style.name) { $L += "$PIPE$ESC[38;2;215;225;130m$($data.output_style.name)$R" }
-
 # --- context ---
 $usedPct = if ($data.context_window.used_percentage) { $data.context_window.used_percentage } else { 0 }
 $rgb = Color-At $usedPct
@@ -92,6 +89,7 @@ if ($data.workspace.git_worktree) {
     try { $branch = git -C $cwd rev-parse --abbrev-ref HEAD 2>$null } catch { $branch = $null }
     if ($branch -and $branch -ne "HEAD") { $L2 += "$PIPE$ESC[38;2;120;200;120m$([char]0xD83C)$([char]0xDF3F) $branch$R" }
 }
+if ($data.output_style.name) { $L2 += "$PIPE$ESC[38;2;215;225;130m$($data.output_style.name)$R" }
 
 $bytes = (New-Object Text.UTF8Encoding $false).GetBytes("$L`n$L2`n")
 $stdout = [Console]::OpenStandardOutput()
